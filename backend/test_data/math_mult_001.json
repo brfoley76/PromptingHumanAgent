@@ -1,0 +1,78 @@
+{
+  "description": "Basic multiplication practice for grade 3",
+  "id": "math_mult_001",
+  "dependencies": null,
+  "subject": "mathematics",
+  "exercises": ["multiplication_quiz"],
+  "content": {
+    "vocabulary": [
+      {
+        "word": "multiply",
+        "definition": "to add a number to itself a certain number of times",
+        "fitb": "{blank} means to add a number to itself a certain number of times"
+      },
+      {
+        "word": "product",
+        "definition": "the answer you get when you multiply numbers",
+        "fitb": "The {blank} is the answer you get when you multiply numbers"
+      },
+      {
+        "word": "factor",
+        "definition": "a number being multiplied",
+        "fitb": "A {blank} is a number being multiplied"
+      }
+    ],
+    "problems": [
+      {
+        "id": 1,
+        "expression": "3 × 4",
+        "a": 3,
+        "b": 4,
+        "answer": 12,
+        "hint": "Think of 3 groups of 4 items",
+        "explanation": "3 × 4 means adding 3 four times: 3 + 3 + 3 + 3 = 12",
+        "strategy": "repeated_addition"
+      },
+      {
+        "id": 2,
+        "expression": "7 × 8",
+        "a": 7,
+        "b": 8,
+        "answer": 56,
+        "hint": "Try 7 × 10 and subtract 7 × 2",
+        "explanation": "7 × 8 = (7 × 10) - (7 × 2) = 70 - 14 = 56",
+        "strategy": "decomposition"
+      },
+      {
+        "id": 3,
+        "expression": "6 × 12",
+        "a": 6,
+        "b": 12,
+        "answer": 72,
+        "hint": "If you know 6 × 6, just double it!",
+        "explanation": "6 × 12 = 6 × (6 + 6) = (6 × 6) + (6 × 6) = 36 + 36 = 72",
+        "strategy": "doubling"
+      },
+      {
+        "id": 4,
+        "expression": "9 × 5",
+        "a": 9,
+        "b": 5,
+        "answer": 45,
+        "hint": "It's close to 10 × 5",
+        "explanation": "9 × 5 = (10 × 5) - (1 × 5) = 50 - 5 = 45",
+        "strategy": "near_multiples"
+      },
+      {
+        "id": 5,
+        "expression": "8 × 3",
+        "a": 8,
+        "b": 3,
+        "answer": 24,
+        "hint": "Same as 3 × 8, which might be easier",
+        "explanation": "8 × 3 = 3 × 8 = 3 + 3 + 3 + 3 + 3 + 3 + 3 + 3 = 24",
+        "strategy": "commutative"
+      }
+    ]
+  }
+}
