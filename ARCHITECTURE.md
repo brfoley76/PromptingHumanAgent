@@ -98,6 +98,7 @@ graph TB
 ### Frontend Components
 
 #### Session Manager
+
 - **Purpose**: Manages session lifecycle and WebSocket connection
 - **Responsibilities**:
   - Initialize session on student login/registration
@@ -106,6 +107,7 @@ graph TB
   - Handle session cleanup on logout
 
 #### Chat Widget
+
 - **Purpose**: Conversational interface with tutor agent
 - **Features**:
   - Collapsible panel
@@ -114,6 +116,7 @@ graph TB
   - Multi-modal support (text, future: audio/video)
 
 #### Exercise Components (Modified)
+
 - **Changes Required**:
   - Add hint button UI
   - Send game events to agent (errors, completions)
@@ -123,6 +126,7 @@ graph TB
 ### Backend Components
 
 #### FastAPI Server
+
 - **REST Endpoints**:
   - `POST /api/session/init` - Initialize learning session
   - `POST /api/session/end` - Close session and save state
@@ -137,6 +141,7 @@ graph TB
 #### LangGraph Agent System
 
 ##### Supervisor Agent
+
 - **Role**: Orchestrates between tutor and activity agents
 - **Decisions**:
   - Route messages to appropriate agent
@@ -144,6 +149,7 @@ graph TB
   - Coordinate context sharing
 
 ##### Tutor Agent
+
 - **Role**: Persistent learning companion for the session
 - **Context**:
   - Full curriculum module content
@@ -157,6 +163,7 @@ graph TB
 - **Personality**: Friendly, pirate-themed, grade 3 appropriate
 
 ##### Activity Agents
+
 - **Specialization**: One per exercise type
 - **Context**:
   - Activity-specific curriculum
@@ -170,6 +177,7 @@ graph TB
   - Generate feedback
 
 #### Data Manager
+
 - **Purpose**: Database operations and data persistence
 - **Functions**:
   - CRUD operations for students, sessions, attempts
@@ -177,8 +185,10 @@ graph TB
   - Retrieve performance analytics
 
 #### Adaptive Manager
+
 - **Purpose**: Intelligence layer for difficulty adjustment
 - **Algorithm**:
+
   ```python
   def calculate_tuning_settings(student_history, activity_type, curriculum):
       # Analyze recent performance
@@ -207,9 +217,11 @@ graph TB
           word_mastery
       )
   ```
+
 - **Outputs**: Tuning_settings JSON for each activity
 
 #### Curriculum Manager
+
 - **Purpose**: Fetch and cache curriculum data from Learning Module Platform
 - **Responsibilities**:
   - Request curriculum data via API or shared filesystem
@@ -221,8 +233,11 @@ graph TB
 ## Platform Separation
 
 ### Learning Module Platform (Existing)
+
 **Port**: 8001 (or file-based)
+
 **Responsibilities**:
+
 - Store and serve all curriculum modules (JSON files)
 - Define exercise types and their settings
 - Manage game assets (images, audio, etc.)
@@ -230,7 +245,8 @@ graph TB
 - Own all educational content
 
 **API Endpoints** (if exposing via HTTP):
-```
+
+```text
 GET /curriculum/{module_id}
 GET /curriculum/{module_id}/vocabulary
 GET /curriculum/{module_id}/narrative
@@ -238,8 +254,11 @@ GET /curriculum/{module_id}/exercise-settings
 ```
 
 ### Agentic Platform (New)
+
 **Port**: 8000
+
 **Responsibilities**:
+
 - Track student performance and history
 - Provide AI tutoring and hints
 - Calculate adaptive difficulty recommendations
@@ -247,6 +266,7 @@ GET /curriculum/{module_id}/exercise-settings
 - Store only performance data, not curriculum
 
 **Data Stored**:
+
 - Student profiles and authentication
 - Activity attempt history
 - Chat message logs
@@ -312,6 +332,7 @@ CREATE INDEX idx_messages_session ON chat_messages(session_id, timestamp);
 ## Data Flow
 
 ### Session Initialization Flow
+
 1. Frontend: User logs in or registers
 2. Frontend → Agentic API: `POST /api/session/init` with student info
 3. Agentic Platform: Generate session_id (UUID)
@@ -325,6 +346,7 @@ CREATE INDEX idx_messages_session ON chat_messages(session_id, timestamp);
 11. Frontend: Display chat widget with greeting
 
 ### Activity Start Flow
+
 1. Student selects activity
 2. Frontend → Agentic API: `POST /api/activity/start`
 3. Agentic Platform: Query student history for performance data
@@ -337,6 +359,7 @@ CREATE INDEX idx_messages_session ON chat_messages(session_id, timestamp);
 10. Frontend: Display agent message, start activity
 
 ### Real-time Interaction Flow (During Activity)
+
 1. Game Event: Student makes error (in Learning Module)
 2. Frontend → Agentic Platform: WebSocket message with error context
 3. Agentic Platform: Route to activity agent
@@ -346,6 +369,7 @@ CREATE INDEX idx_messages_session ON chat_messages(session_id, timestamp);
 7. Frontend: Display hint in chat or overlay
 
 ### Activity End Flow
+
 1. Activity completes (in Learning Module)
 2. Frontend → Agentic Platform: `POST /api/activity/end` with results
 3. Agentic Platform: Store attempt in performance database (with UUID)
@@ -359,6 +383,7 @@ CREATE INDEX idx_messages_session ON chat_messages(session_id, timestamp);
 ## Tuning Settings Specification
 
 ### Multiple Choice
+
 ```json
 {
   "difficulty": "easy|medium|hard",
@@ -369,6 +394,7 @@ CREATE INDEX idx_messages_session ON chat_messages(session_id, timestamp);
 ```
 
 ### Fill in the Blank
+
 ```json
 {
   "difficulty": "easy|moderate",
@@ -378,6 +404,7 @@ CREATE INDEX idx_messages_session ON chat_messages(session_id, timestamp);
 ```
 
 ### Spelling
+
 ```json
 {
   "difficulty": "easy|medium|hard",
@@ -387,6 +414,7 @@ CREATE INDEX idx_messages_session ON chat_messages(session_id, timestamp);
 ```
 
 ### Bubble Pop
+
 ```json
 {
   "difficulty": "easy|moderate|hard",
@@ -400,6 +428,7 @@ CREATE INDEX idx_messages_session ON chat_messages(session_id, timestamp);
 ```
 
 ### Fluent Reading
+
 ```json
 {
   "difficulty": "easy|moderate|hard",
@@ -413,7 +442,8 @@ CREATE INDEX idx_messages_session ON chat_messages(session_id, timestamp);
 ## Agent Prompts
 
 ### Tutor Agent System Prompt
-```
+
+```text
 You are a friendly pirate-themed learning tutor helping a 3rd grade student.
 
 CONTEXT:
@@ -448,7 +478,8 @@ Current conversation:
 ```
 
 ### Activity Agent Prompt Template
-```
+
+```text
 You are an educational assistant helping with the {activity_name} exercise.
 
 CURRENT EXERCISE:
@@ -483,16 +514,19 @@ In the pirate story, {relevant_context}. Try again!"
 ## Security Considerations
 
 ### Authentication
+
 - Student IDs should be authenticated via secure session tokens
 - WebSocket connections must be validated against active sessions
 
 ### Data Privacy
+
 - Encrypt sensitive student data at rest
 - Use HTTPS for all API communication
 - WSS (secure WebSocket) for real-time communication
 - Implement data retention policies
 
 ### Rate Limiting
+
 - Limit API requests per session
 - Throttle LLM queries to manage costs
 - Implement fallback responses if LLM unavailable
@@ -500,11 +534,13 @@ In the pirate story, {relevant_context}. Try again!"
 ## Scalability Considerations
 
 ### Current (Demo)
+
 - SQLite database (file-based)
 - Single server instance
 - Local LLM queries
 
 ### Production
+
 - PostgreSQL or MongoDB for data
 - Redis for session management
 - Multiple API server instances with load balancer
@@ -516,6 +552,7 @@ In the pirate story, {relevant_context}. Try again!"
 ## Technology Stack
 
 ### Backend
+
 - **Language**: Python 3.11+
 - **Framework**: FastAPI 0.104+
 - **Agent Framework**: LangGraph 0.0.20+
@@ -526,13 +563,15 @@ In the pirate story, {relevant_context}. Try again!"
 - **Validation**: Pydantic 2.5+
 
 ### Frontend
+
 - **Base**: Vanilla JavaScript (existing)
 - **WebSocket**: Native WebSocket API
-- **New Libraries**: 
+- **New Libraries**:
   - Marked.js (for markdown rendering in chat)
   - DOMPurify (for XSS protection)
 
 ### Development
+
 - **Testing**: pytest, pytest-asyncio
 - **Linting**: ruff, black
 - **Type Checking**: mypy
@@ -549,6 +588,7 @@ In the pirate story, {relevant_context}. Try again!"
 ## Monitoring and Observability
 
 ### Metrics to Track
+
 - Agent response times
 - LLM token usage and costs
 - Student engagement (messages per session)
@@ -557,6 +597,7 @@ In the pirate story, {relevant_context}. Try again!"
 - WebSocket connection stability
 
 ### Logging
+
 - Structured JSON logs
 - Agent decision traces
 - Student interaction events
@@ -565,18 +606,21 @@ In the pirate story, {relevant_context}. Try again!"
 ## Future Enhancements
 
 ### Phase 2
+
 - Voice interaction (text-to-speech and speech-to-text)
 - Multi-modal content (images, video)
 - Teacher dashboard for monitoring
 - Parent reports
 
 ### Phase 3
+
 - Multi-student sessions (peer learning)
 - Advanced analytics and recommendations
 - Curriculum creation tools
 - Mobile app versions
 
 ### Phase 4
+
 - Integration with school LMS systems
 - Standardized assessment tracking
 - Multi-language support

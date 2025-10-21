@@ -12,13 +12,14 @@ pip install -r requirements.txt
 ```
 
 This installs:
+
 - `langchain` - LLM framework
 - `langchain-openai` - OpenAI integration
 - `langchain-core` - Core components
 
 ### 2. Configure Your API Key
 
-**Option A: Create .env file (Recommended)**
+#### Option A: Create .env file (Recommended)
 
 ```bash
 # Copy the example file
@@ -31,7 +32,7 @@ OPENAI_API_KEY=sk-your-api-key-here
 OPENAI_API_KEY=sk-proj-abc123...
 ```
 
-**Option B: Set environment variable**
+#### Option B: Set environment variable
 
 ```bash
 export OPENAI_API_KEY="sk-proj-abc123..."
@@ -45,12 +46,14 @@ python3 test_terminal.py
 ```
 
 You'll see:
-```
+
+```text
 ✓ Using LLM-powered agent
 ```
 
 If you see this instead:
-```
+
+```text
 ✓ Using simple rule-based agent
 ```
 
@@ -81,6 +84,7 @@ MODEL_NAME=gpt-4-turbo-preview
 ```
 
 **Available Models:**
+
 - `gpt-4-turbo-preview` - Most capable (recommended)
 - `gpt-4` - Very capable
 - `gpt-3.5-turbo` - Faster, cheaper
@@ -94,6 +98,7 @@ MODEL_NAME=claude-3-opus-20240229
 ```
 
 **Available Models:**
+
 - `claude-3-opus-20240229` - Most capable
 - `claude-3-sonnet-20240229` - Balanced
 - `claude-3-haiku-20240307` - Fastest
@@ -113,7 +118,7 @@ AGENT_MAX_TOKENS=500
 
 ### System Architecture
 
-```
+```text
 ┌─────────────────────────────────────┐
 │  Terminal Client                    │
 └──────────────┬──────────────────────┘
@@ -139,30 +144,35 @@ AGENT_MAX_TOKENS=500
 
 ### LLM Agent Features
 
-**1. Dynamic Responses**
+#### 1. Dynamic Responses
+
 - Not template-based
 - Adapts to student's specific errors
 - Natural conversation flow
 
-**2. Curriculum-Aware**
+#### 2. Curriculum-Aware
+
 - Loads vocabulary and problems
 - References curriculum in system prompt
 - Uses curriculum hints as guidance
 
-**3. Socratic Method**
+#### 3. Socratic Method
+
 - Asks guiding questions
 - Never gives answers directly
 - Builds on student explanations
 
-**4. Error Handling**
+#### 4. Error Handling
+
 - Falls back to simple agent if LLM fails
 - Continues working even without internet
 - Graceful degradation
 
 ### Sample Interaction
 
-**With Simple Agent (Rule-Based):**
-```
+#### With Simple Agent (Rule-Based)
+
+```text
 🤖 Agent: Hi Alice! Today we'll be studying multiplication! 
 I'll give you 5 problems. Let's see how you do!
 
@@ -178,8 +188,9 @@ Let's try again. What is 7 × 8? 56
 ✓ Great work figuring that out!
 ```
 
-**With LLM Agent (GPT-4):**
-```
+#### With LLM Agent (GPT-4)
+
+```text
 🤖 Agent: Hi Alice! 🌟 I'm so excited to practice multiplication 
 with you today! We'll work through 5 problems together. You've got this!
 
@@ -199,6 +210,7 @@ Let's try again. What is 7 × 8? 56
 ```
 
 Notice how the LLM:
+
 - Uses more natural language
 - Is more encouraging and warm
 - Provides more context in hints
@@ -214,7 +226,8 @@ python3 test_terminal.py
 ```
 
 Expected output:
-```
+
+```text
 ✓ Using simple rule-based agent
 ```
 
@@ -229,7 +242,8 @@ python3 test_terminal.py
 ```
 
 Expected output:
-```
+
+```text
 ✓ Using LLM-powered agent
 ```
 
@@ -252,14 +266,17 @@ agent = AgentFactory.create_activity_agent("Alice", "math_mult_001", force_type=
 ### OpenAI Pricing (as of 2024)
 
 **GPT-4 Turbo:**
+
 - Input: $0.01 per 1K tokens
 - Output: $0.03 per 1K tokens
 
 **Typical Session Cost:**
+
 - 5 problems with errors: ~10-15K tokens total
 - Cost: ~$0.30-0.50 per session
 
 **GPT-3.5 Turbo (Cheaper Alternative):**
+
 - Input: $0.0005 per 1K tokens
 - Output: $0.0015 per 1K tokens
 - Cost: ~$0.01-0.02 per session
@@ -267,11 +284,13 @@ agent = AgentFactory.create_activity_agent("Alice", "math_mult_001", force_type=
 ### Cost Optimization
 
 1. **Use GPT-3.5 for development:**
+
    ```bash
    MODEL_NAME=gpt-3.5-turbo
    ```
 
 2. **Reduce max_tokens:**
+
    ```bash
    AGENT_MAX_TOKENS=300  # Shorter responses
    ```
@@ -287,6 +306,7 @@ agent = AgentFactory.create_activity_agent("Alice", "math_mult_001", force_type=
 **Problem:** Agent falls back to simple mode
 
 **Solution:**
+
 1. Check `.env` file exists
 2. Verify `OPENAI_API_KEY` is set
 3. Ensure no spaces around the `=`
@@ -297,6 +317,7 @@ agent = AgentFactory.create_activity_agent("Alice", "math_mult_001", force_type=
 **Problem:** Too many requests to OpenAI
 
 **Solution:**
+
 1. Wait a few minutes
 2. Upgrade OpenAI plan
 3. Use GPT-3.5-turbo (higher limits)
@@ -306,6 +327,7 @@ agent = AgentFactory.create_activity_agent("Alice", "math_mult_001", force_type=
 **Problem:** Import error or API error
 
 **Solution:**
+
 1. Reinstall dependencies: `pip install -r requirements.txt`
 2. Check API key is valid
 3. Check internet connection
@@ -316,7 +338,9 @@ agent = AgentFactory.create_activity_agent("Alice", "math_mult_001", force_type=
 **Problem:** Agent responses don't match desired length
 
 **Solution:**
+
 Adjust `AGENT_MAX_TOKENS`:
+
 ```bash
 AGENT_MAX_TOKENS=300  # Shorter
 AGENT_MAX_TOKENS=700  # Longer
@@ -349,7 +373,8 @@ This allows you to fine-tune the teaching style!
 ## Support
 
 If you encounter issues:
+
 1. Check the terminal output for detailed errors
 2. Verify `.env` configuration
 3. Test with simple agent first
-4. Review OpenAI API status: https://status.openai.com
+4. Review OpenAI API status: <https://status.openai.com>

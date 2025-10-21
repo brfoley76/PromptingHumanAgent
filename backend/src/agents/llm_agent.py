@@ -4,6 +4,7 @@ Provides dynamic, contextual tutoring with Socratic dialogue.
 """
 from typing import Dict, List, Optional
 from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from ..config import config
 from ..services.curriculum import CurriculumService
@@ -33,14 +34,22 @@ class LLMAgent:
         self.vocabulary = self.curriculum.get('content', {}).get('vocabulary', [])
         self.problems = self.curriculum.get('content', {}).get('problems', [])
         
-        # Initialize LLM
+        # Initialize LLM based on provider
         llm_config = config.get_llm_config()
-        self.llm = ChatOpenAI(
-            model=llm_config['model_name'],
-            temperature=llm_config['temperature'],
-            max_tokens=llm_config['max_tokens'],
-            api_key=llm_config['api_key']
-        )
+        if llm_config['provider'] == 'anthropic':
+            self.llm = ChatAnthropic(
+                model=llm_config['model_name'],
+                temperature=llm_config['temperature'],
+                max_tokens=llm_config['max_tokens'],
+                anthropic_api_key=llm_config['api_key']
+            )
+        else:  # default to openai
+            self.llm = ChatOpenAI(
+                model=llm_config['model_name'],
+                temperature=llm_config['temperature'],
+                max_tokens=llm_config['max_tokens'],
+                api_key=llm_config['api_key']
+            )
         
         # Build system context
         self.system_context = self._build_system_context()

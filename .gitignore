@@ -2,3 +2,6 @@
 Thumbs.db
 *.swp
 *.swo
+
+# Chat context (development notes)
+CHAT_CONTEXT.md
