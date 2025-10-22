@@ -5,6 +5,7 @@ Can be upgraded to real LLM agent later.
 """
 from typing import Dict, List, Optional
 from enum import Enum
+from ..services.curriculum import CurriculumService
 
 
 class AgentResponse:
@@ -24,10 +25,36 @@ class SimpleAgent:
         self.student_name = student_name
         self.module_id = module_id
         self.conversation_history = []
+        
+        # Load curriculum to be context-aware
+        try:
+            self.curriculum = CurriculumService.load_curriculum(module_id)
+        except:
+            self.curriculum = None
     
     def get_welcome_message(self) -> str:
-        """Initial greeting when session starts"""
-        return f"Hi {self.student_name}! Today we'll be studying multiplication! I'll give you 5 problems. Let's see how you do!"
+        """Initial greeting when session starts - context-aware based on curriculum"""
+        if not self.curriculum:
+            return f"Ahoy {self.student_name}! Welcome aboard! Let's start learning!"
+        
+        # Get module info
+        module_title = self.curriculum.get('title', 'Learning Module')
+        module_description = self.curriculum.get('description', '')
+        
+        # Get some vocabulary words to mention
+        vocab = self.curriculum.get('content', {}).get('vocabulary', [])
+        if vocab and len(vocab) >= 3:
+            sample_words = [v['word'] for v in vocab[:3]]
+            words_text = f"words like {', '.join(sample_words)}"
+        else:
+            words_text = "new vocabulary"
+        
+        # Generate context-appropriate greeting
+        greeting = f"Ahoy there, {self.student_name}! Welcome to {module_title}! "
+        greeting += f"Today we'll be learning {words_text}. "
+        greeting += "Ready to set sail on this learning adventure? ⚓"
+        
+        return greeting
     
     def get_correct_response(self, problem: Dict, is_retry: bool = False) -> AgentResponse:
         """Response when student answers correctly"""
@@ -129,4 +156,37 @@ class TutorAgent(SimpleAgent):
 
 class ActivityAgent(SimpleAgent):
     """Activity-specific agent for multiplication practice"""
-    pass
+    
+    def get_activity_intro(self, activity_type: str, difficulty: str) -> str:
+        """Get introduction message for starting an activity"""
+        intros = {
+            'multiple_choice': f"Let's practice with multiple choice! I'll show you some definitions and you pick the right word.",
+            'fill_in_the_blank': f"Time for fill in the blank! Drag the words to complete the definitions.",
+            'spelling': f"Let's work on spelling! I'll give you definitions and you spell the words.",
+            'bubble_pop': f"Ready for Bubble Pop? Click on bubbles to identify correct and incorrect spellings!",
+            'fluent_reading': f"Let's practice reading fluently! Read along as the text streams across the screen."
+        }
+        
+        base_intro = intros.get(activity_type, "Let's practice!")
+        
+        if difficulty in ['hard', '5']:
+            return f"{base_intro} This is a challenging level - you've got this!"
+        elif difficulty in ['medium', '4']:
+            return f"{base_intro} This is a good level for you!"
+        else:
+            return f"{base_intro} Let's start with the basics!"
+    
+    def get_activity_feedback(self, activity_type: str, score: int, total: int, percentage: float) -> str:
+        """Get feedback message after completing an activity"""
+        if percentage >= 90:
+            feedback = f"Excellent work! You got {score} out of {total} correct ({percentage:.0f}%)! You're really mastering this!"
+        elif percentage >= 80:
+            feedback = f"Great job! You got {score} out of {total} correct ({percentage:.0f}%)! Keep up the good work!"
+        elif percentage >= 70:
+            feedback = f"Good effort! You got {score} out of {total} correct ({percentage:.0f}%)! You're making progress!"
+        elif percentage >= 60:
+            feedback = f"Nice try! You got {score} out of {total} correct ({percentage:.0f}%)! Keep practicing!"
+        else:
+            feedback = f"You got {score} out of {total} correct ({percentage:.0f}%). Don't worry - practice makes perfect!"
+        
+        return feedback

@@ -56,30 +56,39 @@ class LLMAgent:
     
     def _build_system_context(self) -> str:
         """Build system context with curriculum information"""
+        # Get module info
+        module_title = self.curriculum.get('title', 'Learning Module')
+        module_description = self.curriculum.get('description', '')
+        grade_level = self.curriculum.get('gradeLevel', '3rd')
+        
+        # Build vocabulary list
         vocab_text = "\n".join([
             f"- {v['word']}: {v['definition']}" 
             for v in self.vocabulary
         ])
         
-        return f"""You are a friendly, patient math tutor helping {self.student_name}, a 3rd grade student, learn multiplication.
+        return f"""You are a friendly, patient tutor helping {self.student_name}, a {grade_level} grade student.
+
+CURRENT MODULE: {module_title}
+{module_description}
 
 CURRICULUM VOCABULARY:
 {vocab_text}
 
 YOUR TEACHING STYLE:
-- Be warm and encouraging
-- Use simple, age-appropriate language (3rd grade level)
+- Be warm and encouraging with a pirate theme (use "Ahoy", "matey", etc.)
+- Use simple, age-appropriate language ({grade_level} grade level)
 - Keep responses brief (2-3 sentences maximum)
-- Use the Socratic method - guide with questions, don't just give answers
+- Help students learn vocabulary words and their meanings
 - Reference the curriculum vocabulary when relevant
-- Be patient and supportive when the student makes mistakes
-- Celebrate correct answers enthusiastically
+- Be patient and supportive
+- Celebrate progress enthusiastically
 
 IMPORTANT:
-- Never give the answer directly when the student is wrong
-- Instead, provide hints that help them figure it out
-- Use concrete examples and visualizations ("3 groups of 4")
-- Keep explanations simple and clear"""
+- Focus on the vocabulary and reading skills in this module
+- Use the pirate theme to make learning fun
+- Keep explanations simple and clear
+- Encourage students to practice the exercises"""
     
     def _call_llm(self, prompt: str) -> str:
         """
@@ -113,9 +122,18 @@ IMPORTANT:
     
     def get_welcome_message(self) -> str:
         """Initial greeting when session starts"""
-        prompt = f"""Greet {self.student_name} warmly and introduce today's multiplication practice. 
-Mention that you'll give them 5 problems to work on. 
-Keep it brief and encouraging!"""
+        module_title = self.curriculum.get('title', 'Learning Module')
+        
+        # Get a few sample words
+        sample_words = []
+        if len(self.vocabulary) >= 3:
+            sample_words = [v['word'] for v in self.vocabulary[:3]]
+        
+        words_mention = f"words like {', '.join(sample_words)}" if sample_words else "new vocabulary"
+        
+        prompt = f"""Greet {self.student_name} warmly and welcome them to {module_title}. 
+Mention that today they'll be learning {words_mention}.
+Use a pirate theme (Ahoy, matey, etc.) and keep it brief and encouraging (2-3 sentences)!"""
         
         return self._call_llm(prompt)
     
@@ -213,5 +231,33 @@ class TutorAgent(LLMAgent):
 
 
 class ActivityAgent(LLMAgent):
-    """LLM activity-specific agent for multiplication practice"""
-    pass
+    """LLM activity-specific agent for vocabulary practice"""
+    
+    def get_activity_intro(self, activity_type: str, difficulty: str) -> str:
+        """Get introduction message for starting an activity"""
+        activity_names = {
+            'multiple_choice': 'Multiple Choice',
+            'fill_in_the_blank': 'Fill in the Blank',
+            'spelling': 'Spelling',
+            'bubble_pop': 'Bubble Pop',
+            'fluent_reading': 'Fluent Reading'
+        }
+        
+        activity_name = activity_names.get(activity_type, activity_type)
+        
+        prompt = f"""Introduce the {activity_name} activity to {self.student_name}.
+Explain briefly what they'll be doing and encourage them.
+Mention the difficulty level is {difficulty}.
+Use pirate theme and keep it brief (1-2 sentences)!"""
+        
+        return self._call_llm(prompt)
+    
+    def get_activity_feedback(self, activity_type: str, score: int, total: int, percentage: float) -> str:
+        """Get feedback message after completing an activity"""
+        prompt = f"""{self.student_name} just completed {activity_type}!
+Score: {score} out of {total} ({percentage:.0f}%)
+
+Give them encouraging feedback based on their performance.
+Use pirate theme and keep it brief (2-3 sentences)!"""
+        
+        return self._call_llm(prompt)

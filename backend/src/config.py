@@ -38,6 +38,19 @@ class Config:
     PORT: int = int(os.getenv("PORT", "8000"))
     DEBUG: bool = os.getenv("DEBUG", "True").lower() == "true"
     
+    # CORS Configuration
+    CORS_ORIGINS: list = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000"
+    ).split(",")
+    
+    # Learning Module Integration
+    LEARNING_MODULE_PATH: str = os.getenv(
+        "LEARNING_MODULE_PATH",
+        str(Path(__file__).parent.parent.parent.parent / "learning_module" / "web" / "data")
+    )
+    MODULE_ID: str = os.getenv("MODULE_ID", "r003.1")
+    
     @classmethod
     def has_llm_configured(cls) -> bool:
         """Check if LLM is properly configured"""

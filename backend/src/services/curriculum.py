@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Dict, Optional, List
 
+from ..config import config
+
 
 class CurriculumService:
     """
@@ -16,8 +18,11 @@ class CurriculumService:
     # In-memory cache for session duration
     _cache: Dict[str, Dict] = {}
     
-    # Path to Learning Module curriculum (for filesystem access)
-    CURRICULUM_PATH = Path(__file__).parent.parent.parent / "test_data"
+    # Path to Learning Module curriculum (from config)
+    @staticmethod
+    def get_curriculum_path() -> Path:
+        """Get curriculum path from configuration"""
+        return Path(config.LEARNING_MODULE_PATH)
     
     @staticmethod
     def load_curriculum(module_id: str, use_cache: bool = True) -> Dict:
@@ -51,7 +56,8 @@ class CurriculumService:
         Read curriculum from shared filesystem.
         In production, this would be an HTTP API call.
         """
-        curriculum_file = CurriculumService.CURRICULUM_PATH / f"{module_id}.json"
+        curriculum_path = CurriculumService.get_curriculum_path()
+        curriculum_file = curriculum_path / f"{module_id}.json"
         
         if not curriculum_file.exists():
             raise FileNotFoundError(f"Curriculum module '{module_id}' not found at {curriculum_file}")
@@ -92,6 +98,7 @@ class CurriculumService:
     def list_available_modules() -> List[str]:
         """List all available curriculum modules"""
         modules = []
-        for file in CurriculumService.CURRICULUM_PATH.glob("*.json"):
+        curriculum_path = CurriculumService.get_curriculum_path()
+        for file in curriculum_path.glob("*.json"):
             modules.append(file.stem)
         return modules
