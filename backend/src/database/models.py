@@ -20,7 +20,7 @@ class Student(Base):
     __tablename__ = "students"
     
     student_id = Column(String, primary_key=True, default=generate_uuid)
-    name = Column(String, nullable=False)
+    name = Column(String, nullable=False, unique=True, index=True)  # Username is unique
     grade_level = Column(Integer, default=3)
     created_at = Column(DateTime, default=datetime.utcnow)
     

@@ -16,8 +16,7 @@ router = APIRouter()
 # Request/Response Models
 class SessionInitRequest(BaseModel):
     """Request to initialize a new session"""
-    student_id: Optional[str] = None
-    name: Optional[str] = None
+    username: str  # Username is now required
     module_id: str = "r003.1"
 
 
@@ -30,6 +29,8 @@ class SessionInitResponse(BaseModel):
     available_activities: List[str]
     tutor_greeting: str
     curriculum_module: Dict[str, Any]
+    progress: Dict[str, Any]  # Student's progress data
+    is_returning_student: bool
 
 
 class ActivityStartRequest(BaseModel):
@@ -71,25 +72,22 @@ class SessionEndRequest(BaseModel):
 @router.post("/session/init", response_model=SessionInitResponse)
 async def initialize_session(request: SessionInitRequest):
     """
-    Initialize a new learning session.
-    Creates or retrieves student, creates session, loads curriculum.
+    Initialize a new learning session using username.
+    Finds existing student or creates new one, loads their progress.
     """
     try:
-        # Get or create student
-        if request.student_id:
-            # Try to get existing student
-            student = DatabaseOperations.get_student(request.student_id)
-            if not student and request.name:
-                # Student ID provided but doesn't exist, create new student with provided name
-                student = DatabaseOperations.create_student(request.name)
-            elif not student:
-                # Student ID provided but doesn't exist and no name provided
-                raise HTTPException(status_code=404, detail="Student not found")
-        elif request.name:
-            # No student ID, create new student
-            student = DatabaseOperations.create_student(request.name)
-        else:
-            raise HTTPException(status_code=400, detail="Either student_id or name required")
+        # Validate username (alphanumeric only)
+        if not request.username or not request.username.isalnum():
+            raise HTTPException(
+                status_code=400, 
+                detail="Username must contain only letters and numbers"
+            )
+        
+        # Get or create student by username
+        existing_student = DatabaseOperations.get_student_by_name(request.username)
+        is_returning = existing_student is not None
+        
+        student = DatabaseOperations.create_or_get_student(request.username)
         
         # Create session
         session = DatabaseOperations.create_session(student.student_id, request.module_id)
@@ -106,7 +104,10 @@ async def initialize_session(request: SessionInitRequest):
         # Get available activities from curriculum
         available_activities = curriculum.get('exercises', [])
         
-        # Get tutor agent greeting
+        # Get student's progress
+        progress = DatabaseOperations.get_student_progress(student.student_id)
+        
+        # Get tutor agent greeting - ALWAYS use LLM (it knows if returning or new)
         agent = AgentFactory.create_tutor_agent(student.name, request.module_id)
         tutor_greeting = agent.get_welcome_message()
         
@@ -117,7 +118,9 @@ async def initialize_session(request: SessionInitRequest):
             module_id=request.module_id,
             available_activities=available_activities,
             tutor_greeting=tutor_greeting,
-            curriculum_module=curriculum
+            curriculum_module=curriculum,
+            progress=progress,
+            is_returning_student=is_returning
         )
         
     except HTTPException:

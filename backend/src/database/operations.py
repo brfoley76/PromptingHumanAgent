@@ -56,6 +56,55 @@ class DatabaseOperations:
             db.close()
     
     @staticmethod
+    def get_student_by_name(name: str) -> Optional[Student]:
+        """
+        Get a student by username.
+        
+        Args:
+            name: Student's username
+            
+        Returns:
+            Student object or None if not found
+        """
+        db = next(get_db())
+        try:
+            return db.query(Student).filter(Student.name == name).first()
+        finally:
+            db.close()
+    
+    @staticmethod
+    def create_or_get_student(name: str, grade_level: int = 3) -> Student:
+        """
+        Find existing student by username or create new one.
+        
+        Args:
+            name: Student's username
+            grade_level: Grade level (default: 3)
+            
+        Returns:
+            Student object (existing or newly created)
+        """
+        db = next(get_db())
+        try:
+            # Try to find existing student
+            student = db.query(Student).filter(Student.name == name).first()
+            
+            if student:
+                return student
+            
+            # Create new student
+            student = Student(
+                name=name,
+                grade_level=grade_level
+            )
+            db.add(student)
+            db.commit()
+            db.refresh(student)
+            return student
+        finally:
+            db.close()
+    
+    @staticmethod
     def create_session(student_id: str, module_id: str) -> SessionModel:
         """
         Create a new learning session.
@@ -83,7 +132,7 @@ class DatabaseOperations:
     @staticmethod
     def get_session(session_id: str) -> Optional[SessionModel]:
         """
-        Get a session by ID.
+        Get a session by ID with eagerly loaded student relationship.
         
         Args:
             session_id: Session's ID
@@ -91,9 +140,20 @@ class DatabaseOperations:
         Returns:
             Session object or None if not found
         """
+        from sqlalchemy.orm import joinedload
+        
         db = next(get_db())
         try:
-            return db.query(SessionModel).filter(SessionModel.session_id == session_id).first()
+            session = db.query(SessionModel)\
+                .options(joinedload(SessionModel.student))\
+                .filter(SessionModel.session_id == session_id)\
+                .first()
+            
+            # If session found, access student.name to load it before detaching
+            if session and session.student:
+                _ = session.student.name  # Force load
+            
+            return session
         finally:
             db.close()
     
@@ -270,6 +330,111 @@ class DatabaseOperations:
         # For now, this is a no-op since we don't have the ExerciseUnlock table yet
         # The frontend will manage unlock state via the backend's activity/end response
         return True
+    
+    @staticmethod
+    def get_student_progress(student_id: str) -> Dict[str, Any]:
+        """
+        Get detailed progress for a student including unlock states.
+        
+        Args:
+            student_id: Student's ID
+            
+        Returns:
+            Dictionary with progress data for each activity
+        """
+        db = next(get_db())
+        try:
+            attempts = db.query(ActivityAttempt)\
+                .filter(ActivityAttempt.student_id == student_id)\
+                .all()
+            
+            # Define activity order for unlock logic
+            activity_order = [
+                'multiple_choice',
+                'fill_in_the_blank', 
+                'spelling',
+                'bubble_pop',
+                'fluent_reading'
+            ]
+            
+            progress = {}
+            
+            for activity in activity_order:
+                activity_attempts = [a for a in attempts if a.activity == activity]
+                
+                if not activity_attempts:
+                    # No attempts yet
+                    progress[activity] = {
+                        "unlocked": activity == 'multiple_choice',  # Only first is unlocked
+                        "best_score": None,
+                        "highest_difficulty": None,
+                        "attempts": 0
+                    }
+                else:
+                    # Find best score and highest difficulty
+                    best_attempt = max(activity_attempts, 
+                                     key=lambda a: (a.score / a.total) if a.total > 0 else 0)
+                    
+                    # Determine highest difficulty completed
+                    difficulties = [a.difficulty for a in activity_attempts]
+                    highest_diff = max(difficulties, key=lambda d: DatabaseOperations._difficulty_value(activity, d))
+                    
+                    progress[activity] = {
+                        "unlocked": True,  # Has attempts, so it's unlocked
+                        "best_score": {
+                            "score": best_attempt.score,
+                            "total": best_attempt.total,
+                            "difficulty": best_attempt.difficulty,
+                            "percentage": round((best_attempt.score / best_attempt.total * 100) if best_attempt.total > 0 else 0, 1)
+                        },
+                        "highest_difficulty": highest_diff,
+                        "attempts": len(activity_attempts)
+                    }
+                    
+                    # Check if next activity should be unlocked
+                    current_index = activity_order.index(activity)
+                    if current_index < len(activity_order) - 1:
+                        # Check if hard difficulty completed with 80%+
+                        hard_attempts = [a for a in activity_attempts 
+                                       if DatabaseOperations._is_hard_difficulty(activity, a.difficulty)
+                                       and (a.score / a.total * 100) >= 80]
+                        
+                        if hard_attempts:
+                            next_activity = activity_order[current_index + 1]
+                            if next_activity not in progress:
+                                progress[next_activity] = {
+                                    "unlocked": True,
+                                    "best_score": None,
+                                    "highest_difficulty": None,
+                                    "attempts": 0
+                                }
+                            else:
+                                progress[next_activity]["unlocked"] = True
+            
+            return progress
+        finally:
+            db.close()
+    
+    @staticmethod
+    def _difficulty_value(activity: str, difficulty: str) -> int:
+        """Helper to convert difficulty to numeric value for comparison"""
+        if activity == 'multiple_choice':
+            return int(difficulty) if difficulty.isdigit() else 3
+        elif activity in ['fill_in_the_blank', 'spelling', 'bubble_pop']:
+            difficulty_map = {'easy': 1, 'moderate': 2, 'medium': 2, 'hard': 3}
+            return difficulty_map.get(difficulty.lower(), 1)
+        else:  # fluent_reading uses WPM
+            return int(difficulty) if difficulty.isdigit() else 150
+    
+    @staticmethod
+    def _is_hard_difficulty(activity: str, difficulty: str) -> bool:
+        """Helper to check if difficulty is 'hard' for unlock purposes"""
+        if activity == 'multiple_choice':
+            return difficulty == '5'
+        elif activity == 'fill_in_the_blank':
+            return difficulty.lower() == 'moderate'
+        else:
+            return difficulty.lower() == 'hard'
     
     @staticmethod
     def get_student_stats(student_id: str) -> Dict[str, Any]:
