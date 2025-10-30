@@ -98,7 +98,7 @@ This backend follows the documented architecture with strict separation:
 
 ### Database Schema
 
-*Note: for now the student ID is maintained in a save file in the browser, we can later work on some kind of login. Tuning levers are specific to the activity types. chat message recording is currently off.*
+*Note: Student data is stored in the database and synced with browser localStorage. Chat messages are actively recorded in the ChatMessages table. Username-based authentication is implemented.*
 
 ```sql
 students
@@ -287,11 +287,13 @@ This allows the web UI to use the same backend.
 1. ✅ Terminal test client working
 2. ✅ LLM agent integration (OpenAI/Anthropic)
 3. ✅ Jupyter notebook for data analysis
-4. ⏳ Add FastAPI REST endpoints
-5. ⏳ Add WebSocket for real-time chat
-6. ⏳ Integrate with web UI
-7. ⏳ Add more curriculum modules
-8. ⏳ Implement adaptive difficulty based on history
+4. ✅ Add FastAPI REST endpoints
+5. ✅ Add WebSocket for real-time chat
+6. ✅ Integrate with web UI
+7. ✅ Implement adaptive difficulty based on history
+8. ⏳ Add more curriculum modules
+9. ⏳ Enhanced analytics dashboard
+10. ⏳ A/B testing framework
 
 ## Files Created
 

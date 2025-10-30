@@ -1,6 +1,20 @@
-# Agent Tests
+# Backend Testing Guide
 
+Comprehensive testing documentation for the backend, including agent tests, API tests, and WebSocket tests.
+
+## Test Structure
+
+### Agent Tests (test_agents.py)
 Unit tests for the LLM-powered agents (Tutor and Activity agents).
+
+### API Tests (TODO)
+Tests for REST API endpoints.
+
+### WebSocket Tests (TODO)
+Tests for WebSocket communication.
+
+### Integration Tests (TODO)
+End-to-end tests for complete workflows.
 
 ## Setup
 
