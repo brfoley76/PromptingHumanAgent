@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import Student, Session as SessionModel, ActivityAttempt, ChatMessage
+from .models import Student, Session as SessionModel, ActivityAttempt, ChatMessage, StudentProficiency
 
 
 class DatabaseOperations:
@@ -435,6 +435,166 @@ class DatabaseOperations:
             return difficulty.lower() == 'moderate'
         else:
             return difficulty.lower() == 'hard'
+    
+    @staticmethod
+    def get_or_create_proficiency(
+        student_id: str,
+        level: str,
+        domain: str = None,
+        module_id: str = None,
+        item_id: str = None
+    ) -> StudentProficiency:
+        """
+        Get existing proficiency or create with default priors.
+        
+        Args:
+            student_id: Student's ID
+            level: "domain", "module", or "item"
+            domain: Domain name (optional)
+            module_id: Module ID (optional)
+            item_id: Item ID (optional)
+            
+        Returns:
+            StudentProficiency object
+        """
+        db = next(get_db())
+        try:
+            query = db.query(StudentProficiency).filter(
+                StudentProficiency.student_id == student_id,
+                StudentProficiency.level == level
+            )
+            
+            if domain:
+                query = query.filter(StudentProficiency.domain == domain)
+            if module_id:
+                query = query.filter(StudentProficiency.module_id == module_id)
+            if item_id:
+                query = query.filter(StudentProficiency.item_id == item_id)
+            
+            prof = query.first()
+            
+            if not prof:
+                prof = StudentProficiency(
+                    student_id=student_id,
+                    level=level,
+                    domain=domain,
+                    module_id=module_id,
+                    item_id=item_id
+                )
+                db.add(prof)
+                db.commit()
+                db.refresh(prof)
+            
+            return prof
+        finally:
+            db.close()
+    
+    @staticmethod
+    def get_student_proficiencies(
+        student_id: str,
+        level: str = None,
+        module_id: str = None
+    ) -> List[StudentProficiency]:
+        """
+        Get proficiency records for a student.
+        INTERNAL USE ONLY - never expose via API.
+        
+        Args:
+            student_id: Student's ID
+            level: Filter by level (optional)
+            module_id: Filter by module (optional)
+            
+        Returns:
+            List of StudentProficiency objects
+        """
+        db = next(get_db())
+        try:
+            query = db.query(StudentProficiency).filter(
+                StudentProficiency.student_id == student_id
+            )
+            
+            if level:
+                query = query.filter(StudentProficiency.level == level)
+            if module_id:
+                query = query.filter(StudentProficiency.module_id == module_id)
+            
+            return query.all()
+        finally:
+            db.close()
+    
+    @staticmethod
+    def update_proficiency_estimate(
+        proficiency_id: str,
+        alpha: float,
+        beta: float,
+        mean_ability: float,
+        confidence: float,
+        sample_count: int = None
+    ) -> StudentProficiency:
+        """
+        Update a proficiency record with new estimates.
+        
+        Args:
+            proficiency_id: Proficiency ID
+            alpha: Beta distribution alpha parameter
+            beta: Beta distribution beta parameter
+            mean_ability: Calculated mean ability
+            confidence: Confidence score
+            sample_count: Number of samples (optional)
+            
+        Returns:
+            Updated StudentProficiency object
+        """
+        db = next(get_db())
+        try:
+            prof = db.query(StudentProficiency).filter(
+                StudentProficiency.proficiency_id == proficiency_id
+            ).first()
+            
+            if prof:
+                prof.alpha = alpha
+                prof.beta = beta
+                prof.mean_ability = mean_ability
+                prof.confidence = confidence
+                if sample_count is not None:
+                    prof.sample_count = sample_count
+                prof.last_updated = datetime.utcnow()
+                db.commit()
+                db.refresh(prof)
+            
+            return prof
+        finally:
+            db.close()
+    
+    @staticmethod
+    def bulk_create_proficiencies(
+        proficiency_list: List[Dict[str, Any]]
+    ) -> List[StudentProficiency]:
+        """
+        Bulk create proficiency records for efficiency.
+        
+        Args:
+            proficiency_list: List of proficiency dicts with keys:
+                student_id, level, domain, module_id, item_id
+                
+        Returns:
+            List of created StudentProficiency objects
+        """
+        db = next(get_db())
+        try:
+            proficiencies = []
+            for prof_data in proficiency_list:
+                prof = StudentProficiency(**prof_data)
+                db.add(prof)
+                proficiencies.append(prof)
+            
+            db.commit()
+            for prof in proficiencies:
+                db.refresh(prof)
+            
+            return proficiencies
+        finally:
+            db.close()
     
     @staticmethod
     def get_student_stats(student_id: str) -> Dict[str, Any]:

@@ -4,7 +4,7 @@ Stores student performance data only - NOT curriculum content.
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey, Text, Float, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -27,6 +27,7 @@ class Student(Base):
     # Relationships
     sessions = relationship("Session", back_populates="student")
     attempts = relationship("ActivityAttempt", back_populates="student")
+    proficiencies = relationship("StudentProficiency", back_populates="student")
 
 
 class Session(Base):
@@ -79,3 +80,54 @@ class ChatMessage(Base):
     
     # Relationships
     session = relationship("Session", back_populates="messages")
+
+
+class StudentProficiency(Base):
+    """
+    PRIVATE: Never exposed to frontend
+    Bayesian proficiency estimates for adaptive learning
+    
+    Uses Beta distribution for Bayesian updating:
+    - Prior: Beta(α₀, β₀) = Beta(2, 2) - slightly informed prior at 50%
+    - After n successes and m failures: Beta(α₀+n, β₀+m)
+    - Mean ability = α / (α + β)
+    - Confidence increases as α + β increases
+    """
+    __tablename__ = "student_proficiencies"
+    
+    proficiency_id = Column(String, primary_key=True, default=generate_uuid)
+    student_id = Column(String, ForeignKey("students.student_id"), nullable=False, index=True)
+    
+    # Granularity levels: "domain" (e.g., verbal), "module" (e.g., r003.1), "item" (e.g., pirate)
+    level = Column(String, nullable=False, index=True)
+    
+    # Identifiers
+    domain = Column(String, nullable=True)  # "reading", "math", etc.
+    module_id = Column(String, nullable=True, index=True)  # "r003.1", etc.
+    item_id = Column(String, nullable=True, index=True)  # "pirate", "3x4", etc.
+    
+    # Beta distribution parameters (for Bayesian updating)
+    alpha = Column(Float, default=2.0)  # Success count + prior
+    beta = Column(Float, default=2.0)   # Failure count + prior
+    
+    # Derived metrics (cached for performance)
+    mean_ability = Column(Float, default=0.5)  # alpha / (alpha + beta)
+    confidence = Column(Float, default=0.5)    # Related to alpha + beta
+    
+    # Learning dynamics
+    learning_rate = Column(Float, default=0.1)  # Student-specific adjustment
+    forgetting_rate = Column(Float, default=0.05)  # Per day
+    
+    # Metadata
+    sample_count = Column(Integer, default=0)  # Number of observations
+    last_updated = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    student = relationship("Student", back_populates="proficiencies")
+    
+    # Composite index for efficient queries
+    __table_args__ = (
+        Index('idx_student_level_module', 'student_id', 'level', 'module_id'),
+        Index('idx_student_module_item', 'student_id', 'module_id', 'item_id'),
+    )

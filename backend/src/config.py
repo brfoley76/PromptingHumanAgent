@@ -30,6 +30,16 @@ class Config:
     AGENT_TEMPERATURE: float = float(os.getenv("AGENT_TEMPERATURE", "0.7"))
     AGENT_MAX_TOKENS: int = int(os.getenv("AGENT_MAX_TOKENS", "500"))
     
+    # Token Management
+    MAX_TOKENS_WARNING: int = int(os.getenv("MAX_TOKENS_WARNING", "150000"))
+    MAX_TOKENS_LIMIT: int = int(os.getenv("MAX_TOKENS_LIMIT", "180000"))
+    MAX_TOKENS_HARD_LIMIT: int = int(os.getenv("MAX_TOKENS_HARD_LIMIT", "190000"))
+    
+    # Conversation History Limits
+    TUTOR_SUMMARY_THRESHOLD: int = int(os.getenv("TUTOR_SUMMARY_THRESHOLD", "20"))
+    TUTOR_RECENT_MESSAGES: int = int(os.getenv("TUTOR_RECENT_MESSAGES", "10"))
+    ACTIVITY_MESSAGE_LIMIT: int = int(os.getenv("ACTIVITY_MESSAGE_LIMIT", "10"))
+    
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./learning.db")
     

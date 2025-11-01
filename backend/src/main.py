@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from .config import config
 from .database.database import init_db
 from .api import routes, websocket
+from .middleware import rate_limiter
 
 
 @asynccontextmanager
@@ -46,6 +47,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add rate limiting middleware
+app.middleware("http")(rate_limiter)
 
 # Include routers
 app.include_router(routes.router, prefix="/api")

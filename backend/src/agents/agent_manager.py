@@ -49,10 +49,12 @@ class AgentManager:
         if self.current_activity_agent:
             self.end_activity()
         
-        # Create new activity agent with context
+        # Create new activity agent with filtered vocabulary context
         self.current_activity_agent = ActivityAgent(
             self.student_name,
-            self.module_id
+            self.module_id,
+            activity_type=activity_type,
+            difficulty=difficulty
         )
         self.current_activity_type = activity_type
         self.current_difficulty = difficulty
@@ -149,9 +151,9 @@ class AgentManager:
         word = question_data.get('correct_answer', 'that')
         
         if is_retry:
-            prompt = f"{self.student_name} got '{word}' correct after trying again! Give brief, enthusiastic praise for persevering (1 sentence)."
+            prompt = f"{self.student_name} got '{word}' correct after trying again. Say 'Good job' in 1 short sentence."
         else:
-            prompt = f"{self.student_name} correctly matched '{word}'! Give brief, enthusiastic praise (1 sentence)."
+            prompt = f"{self.student_name} got '{word}' correct. Say 'Good' in 1 short sentence."
         
         return self.current_activity_agent._call_llm(prompt)
     
@@ -168,7 +170,7 @@ class AgentManager:
         """
         # If in activity, use activity agent
         if self.current_activity_agent and context and context.get('in_activity'):
-            prompt = f"{self.student_name} asks during {self.current_activity_type}: '{message}'\n\nRespond helpfully about the activity. Keep it brief (2-3 sentences)."
+            prompt = f"{self.student_name} asks: '{message}'\nAnswer in 1 short sentence."
             return self.current_activity_agent._call_llm(prompt)
         
         # Otherwise use tutor
@@ -215,19 +217,19 @@ DIFFICULTY: {self.current_difficulty} (3=easy, 4=medium, 5=hard)
 """
         
         if hint_level == 'gentle':
-            return base + f"\nGive a gentle hint without revealing the answer. Maybe mention the first letter or a characteristic of the word. Keep it encouraging and brief (1-2 sentences)."
+            return base + f"\nGive a gentle hint. Use 1 short sentence."
         
         elif hint_level == 'specific':
-            return base + f"\nGive a more specific hint. You can reveal more about the word (like first few letters or a strong clue). Stay encouraging (1-2 sentences)."
+            return base + f"\nGive a clear hint. Use 1 short sentence."
         
         elif hint_level == 'explicit':
-            return base + f"\nThis is their third try. Give a very clear hint that almost gives it away, but let them make the final connection. Be supportive (1-2 sentences)."
+            return base + f"\nGive a very clear hint. Use 1 short sentence."
         
         elif hint_level == 'moderate':
-            return base + f"\nGive one helpful hint (this is their only hint). Make it useful but not too obvious. Keep it brief (1-2 sentences)."
+            return base + f"\nGive one helpful hint. Use 1 short sentence."
         
         else:  # none
-            return base + f"\nJust acknowledge they got it wrong briefly. No hints. (1 sentence)."
+            return base + f"\nSay they got it wrong. Use 1 short sentence."
     
     def get_tutor(self) -> TutorAgent:
         """Get the persistent tutor agent"""

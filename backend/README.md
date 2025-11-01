@@ -1,24 +1,59 @@
 # Agentic Learning Platform - Backend
 
-This is the backend implementation of the Agentic Learning Platform, featuring a terminal-based test client for the multiplication quiz.
+This is the backend implementation of the Agentic Learning Platform, providing REST API, WebSocket communication, and LLM-powered agents for the learning module frontend.
 
 ## Quick Start
 
-### 1. Install Dependencies
+### Prerequisites
+- Python 3.9 or higher
+- pip (Python package manager)
+
+### Full Setup (Backend + Frontend)
+
+For the complete learning experience:
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/brfoley76/PromptingHumans.git
+   cd PromptingHumans
+   ```
+
+2. **Install backend dependencies:**
+   ```bash
+   cd prompting_human_agent/backend
+   pip install -r requirements.txt
+   ```
+
+3. **Start the backend server:**
+   ```bash
+   python3 -m src.main
+   ```
+   
+   The backend API will run on `http://localhost:8001`
+   - API docs available at: `http://localhost:8001/docs`
+   - Health check: `http://localhost:8001/health`
+
+4. **Start the frontend (in another terminal):**
+   ```bash
+   cd ../../learning_module/web
+   python3 -m http.server 8000
+   ```
+
+5. **Open in browser:**
+   - Frontend: `http://localhost:8000`
+   - The frontend will automatically connect to the backend at `http://localhost:8001`
+
+### Backend Only (Terminal Test)
+
+To test the backend independently with a terminal-based quiz:
 
 ```bash
-cd backend
+cd prompting_human_agent/backend
 pip install -r requirements.txt
-```
-
-### 2. Run Terminal Test
-
-```bash
 python test_terminal.py
 ```
 
 This will:
-
 - Initialize the database (`learning.db`)
 - Prompt for your name
 - Present 5 multiplication problems

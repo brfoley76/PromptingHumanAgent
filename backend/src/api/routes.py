@@ -8,6 +8,7 @@ from datetime import datetime
 
 from ..database.operations import DatabaseOperations
 from ..services.curriculum import CurriculumService
+from ..services.bayesian_proficiency import BayesianProficiencyService
 from ..agents.agent_factory import AgentFactory
 
 router = APIRouter()
@@ -104,11 +105,29 @@ async def initialize_session(request: SessionInitRequest):
         # Get available activities from curriculum
         available_activities = curriculum.get('exercises', [])
         
+        # Initialize Bayesian proficiencies for new students
+        if not is_returning:
+            vocab = curriculum.get('content', {}).get('vocabulary', [])
+            domain = curriculum.get('subject', 'reading')
+            BayesianProficiencyService.initialize_student_proficiencies(
+                student.student_id,
+                request.module_id,
+                domain,
+                vocab
+            )
+        
         # Get student's progress
         progress = DatabaseOperations.get_student_progress(student.student_id)
         
-        # Get tutor agent greeting - ALWAYS use LLM (it knows if returning or new)
-        agent = AgentFactory.create_tutor_agent(student.name, request.module_id)
+        # Build activity state for tutor agent
+        unlocked_activities = progress.get('unlocked_exercises', [])
+        activity_state = {
+            'available': available_activities,
+            'unlocked': unlocked_activities if unlocked_activities else [available_activities[0]] if available_activities else []
+        }
+        
+        # Get tutor agent greeting with activity state context
+        agent = AgentFactory.create_tutor_agent(student.name, request.module_id, activity_state=activity_state)
         tutor_greeting = agent.get_welcome_message()
         
         return SessionInitResponse(
@@ -154,7 +173,7 @@ async def end_session(request: SessionEndRequest):
 @router.post("/activity/start", response_model=ActivityStartResponse)
 async def start_activity(request: ActivityStartRequest):
     """
-    Start an activity and get tuning recommendations.
+    Start an activity and get Bayesian-based adaptive recommendations.
     """
     try:
         # Verify session exists
@@ -162,33 +181,51 @@ async def start_activity(request: ActivityStartRequest):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # Get student's performance history for this activity
-        history = DatabaseOperations.get_student_performance_history(
+        # Check if activity is optional
+        curriculum = CurriculumService.load_curriculum(session.module_id)
+        optional_exercises = curriculum.get('optional_exercises', [])
+        is_optional = request.activity_type in optional_exercises
+        
+        # Get Bayesian adaptive recommendations
+        recommendations = BayesianProficiencyService.get_adaptive_recommendations(
             session.student_id,
+            session.module_id,
             request.activity_type,
-            limit=5
+            is_optional=is_optional
         )
         
-        # Get recommended tuning based on history
-        recommended_tuning = _get_recommended_tuning(
+        # Check if should skip activity (only for optional activities)
+        if recommendations.get('skip_activity', False):
+            skip_reason = recommendations.get('skip_reason', 'This is a bonus activity!')
+            return ActivityStartResponse(
+                activity_type=request.activity_type,
+                recommended_tuning={
+                    'difficulty': 'skip',
+                    'skip': True,
+                    'is_optional': True
+                },
+                agent_intro=skip_reason,
+                vocabulary_focus=[]
+            )
+        
+        # Build recommended tuning from Bayesian recommendations
+        recommended_tuning = _build_tuning_from_recommendations(
             request.activity_type,
-            history
+            recommendations
         )
         
         # Get agent intro message
-        session = DatabaseOperations.get_session(request.session_id)
         agent = AgentFactory.create_activity_agent(session.student_id, session.module_id)
         agent_intro = agent.get_activity_intro(
             request.activity_type,
             recommended_tuning.get('difficulty', 'medium')
         )
         
-        # Get vocabulary focus if applicable
-        vocabulary_focus = None
-        if request.activity_type in ['multiple_choice', 'spelling', 'fill_in_the_blank']:
+        # Use Bayesian focus items if available, otherwise use defaults
+        vocabulary_focus = recommendations.get('focus_items', [])
+        if not vocabulary_focus and request.activity_type in ['multiple_choice', 'spelling', 'fill_in_the_blank']:
             curriculum = CurriculumService.load_curriculum(session.module_id)
             vocab = curriculum.get('content', {}).get('vocabulary', [])
-            # Focus on first 5 words for now
             vocabulary_focus = [v['word'] for v in vocab[:5]]
         
         return ActivityStartResponse(
@@ -229,6 +266,16 @@ async def end_activity(request: ActivityEndRequest):
             item_results=request.results.get('item_results', [])
         )
         
+        # Update Bayesian proficiencies with new evidence
+        curriculum = CurriculumService.load_curriculum(session.module_id)
+        domain = curriculum.get('subject', 'reading')
+        BayesianProficiencyService.update_proficiencies(
+            student_id=session.student_id,
+            module_id=session.module_id,
+            domain=domain,
+            item_results=request.results.get('item_results', [])
+        )
+        
         # Calculate percentage
         percentage = (request.results['score'] / request.results['total'] * 100) if request.results['total'] > 0 else 0
         
@@ -241,9 +288,15 @@ async def end_activity(request: ActivityEndRequest):
             percentage
         )
         
-        # Check for unlocks
+        # Check for unlocks using Bayesian mastery threshold
         unlocked = []
-        if percentage >= 80 and _is_hard_difficulty(request.activity_type, request.tuning_settings.get('difficulty')):
+        module_mastered = BayesianProficiencyService.check_mastery_threshold(
+            session.student_id,
+            session.module_id,
+            threshold=0.85
+        )
+        
+        if module_mastered or (percentage >= 80 and _is_hard_difficulty(request.activity_type, request.tuning_settings.get('difficulty'))):
             next_activity = _get_next_activity(request.activity_type)
             if next_activity:
                 DatabaseOperations.unlock_exercise(session.student_id, next_activity, session.module_id)
@@ -274,6 +327,57 @@ async def end_activity(request: ActivityEndRequest):
 
 
 # Helper functions
+def _get_activity_display_name(activity_type: str) -> str:
+    """Get child-friendly display name for activity"""
+    names = {
+        'multiple_choice': 'Word Quiz',
+        'fill_in_the_blank': 'Fill It In',
+        'spelling': 'Spell It',
+        'bubble_pop': 'Bubble Fun',
+        'fluent_reading': 'Read It'
+    }
+    return names.get(activity_type, activity_type.replace('_', ' ').title())
+
+
+def _get_activity_icon(activity_type: str) -> str:
+    """Get emoji icon for activity"""
+    icons = {
+        'multiple_choice': '🎯',
+        'fill_in_the_blank': '✏️',
+        'spelling': '🔤',
+        'bubble_pop': '🫧',
+        'fluent_reading': '📖'
+    }
+    return icons.get(activity_type, '📝')
+
+
+def _build_tuning_from_recommendations(activity_type: str, recommendations: Dict) -> Dict[str, Any]:
+    """Build activity-specific tuning from Bayesian recommendations"""
+    difficulty = recommendations.get('difficulty', 'medium')
+    num_questions = recommendations.get('num_questions', 10)
+    
+    # For multiple choice easy level, test all vocabulary words (24 in r003.1)
+    if activity_type == 'multiple_choice' and difficulty == '3':
+        num_questions = 24  # Test all words at easy level
+    
+    base_tuning = {
+        'difficulty': difficulty,
+        'num_questions': num_questions
+    }
+    
+    if activity_type == 'multiple_choice':
+        base_tuning['num_choices'] = 4
+    elif activity_type == 'bubble_pop':
+        speed_map = {'easy': 1.0, 'medium': 1.5, 'hard': 2.0, '3': 1.0, '4': 1.5, '5': 2.0}
+        base_tuning['bubble_speed'] = speed_map.get(difficulty, 1.0)
+        base_tuning['error_rate'] = 0.2 if difficulty in ['easy', '3'] else 0.3
+    elif activity_type == 'fluent_reading':
+        speed_map = {'easy': 100, 'medium': 150, 'hard': 200, '3': 100, '4': 150, '5': 200}
+        base_tuning['target_speed'] = speed_map.get(difficulty, 100)
+    
+    return base_tuning
+
+
 def _get_recommended_tuning(activity_type: str, history: List) -> Dict[str, Any]:
     """Get recommended tuning based on performance history"""
     if not history:

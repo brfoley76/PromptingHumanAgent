@@ -102,3 +102,72 @@ class CurriculumService:
         for file in curriculum_path.glob("*.json"):
             modules.append(file.stem)
         return modules
+    
+    @staticmethod
+    def load_curriculum_light(module_id: str, use_cache: bool = True) -> Dict:
+        """
+        Load lightweight curriculum without narrative content.
+        This reduces token usage for agent context.
+        
+        Args:
+            module_id: Curriculum module identifier
+            use_cache: Whether to use cached data
+            
+        Returns:
+            Curriculum dictionary without narrative section
+        """
+        curriculum = CurriculumService.load_curriculum(module_id, use_cache)
+        
+        # Create lightweight copy without narrative
+        light_curriculum = {
+            'id': curriculum.get('id'),
+            'title': curriculum.get('title', ''),
+            'description': curriculum.get('description', ''),
+            'gradeLevel': curriculum.get('gradeLevel', ''),
+            'subject': curriculum.get('subject', ''),
+            'goals': curriculum.get('goals', ''),
+            'exercises': curriculum.get('exercises', []),
+            'optional_exercises': curriculum.get('optional_exercises', []),
+            'content': {
+                'vocabulary': curriculum.get('content', {}).get('vocabulary', []),
+                'problems': curriculum.get('content', {}).get('problems', [])
+            }
+        }
+        
+        return light_curriculum
+    
+    @staticmethod
+    def get_activity_vocabulary(module_id: str, activity_type: str, difficulty: str) -> List[Dict]:
+        """
+        Get vocabulary subset relevant for a specific activity.
+        Filters by difficulty and importance for token efficiency.
+        
+        Args:
+            module_id: Curriculum module identifier
+            activity_type: Type of activity (e.g., 'multiple_choice')
+            difficulty: Difficulty level ('3', '4', '5')
+            
+        Returns:
+            Filtered vocabulary list
+        """
+        vocabulary = CurriculumService.get_vocabulary(module_id)
+        
+        # Convert difficulty to float for comparison
+        try:
+            max_difficulty = float(difficulty) / 5.0  # Normalize to 0-1 scale
+        except (ValueError, TypeError):
+            max_difficulty = 1.0  # Default to all difficulties
+        
+        # Filter vocabulary based on difficulty and importance
+        filtered_vocab = []
+        for vocab in vocabulary:
+            vocab_difficulty = vocab.get('difficulty', 0.5)
+            vocab_importance = vocab.get('importance', 1.0)
+            
+            # Include if:
+            # 1. Difficulty is appropriate (within range)
+            # 2. High importance words (>0.8) are always included
+            if vocab_difficulty <= max_difficulty or vocab_importance > 0.8:
+                filtered_vocab.append(vocab)
+        
+        return filtered_vocab
