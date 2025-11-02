@@ -9,6 +9,7 @@ from datetime import datetime
 from ..database.operations import DatabaseOperations
 from ..agents.agent_factory import AgentFactory
 from ..agents.agent_manager import AgentManager
+from .routes import _build_student_context
 
 router = APIRouter()
 
@@ -75,13 +76,34 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         print(f"⚠️ Session not found: {session_id}, continuing anyway...")
         # Don't close connection - allow it to work without database
         session = type('obj', (object,), {
-            'student': type('obj', (object,), {'name': student_name})()
+            'student': type('obj', (object,), {'name': student_name, 'student_id': 'unknown'})()
         })()
+    
+    # Build student context for returning students
+    student_context = None
+    if session and hasattr(session, 'student'):
+        try:
+            student_id = session.student.student_id
+            # Get student's progress
+            progress = DatabaseOperations.get_student_progress(student_id)
+            # Check if returning student (has any progress)
+            is_returning = any(data.get('unlocked', False) or data.get('best_score') for data in progress.values())
+            
+            if is_returning:
+                print(f"[WEBSOCKET] Building context for returning student: {student_name}")
+                student_context = _build_student_context(student_id, 'r003.1', progress)
+                print(f"[WEBSOCKET] Context built with {len(student_context)} sections")
+            else:
+                print(f"[WEBSOCKET] New student - no context needed")
+        except Exception as e:
+            print(f"[WEBSOCKET] Could not build student context: {e}")
+            student_context = None
     
     # Create AgentManager for this session (manages both tutor and activity agents)
     agent_manager = AgentManager(
         student_name=student_name,
-        module_id='r003.1'
+        module_id='r003.1',
+        student_context=student_context
     )
     agent_managers[session_id] = agent_manager
     

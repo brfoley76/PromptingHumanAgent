@@ -46,6 +46,7 @@ class AgentFactory:
     @staticmethod
     def create_tutor_agent(student_name: str, module_id: str,
                           activity_state: dict = None,
+                          student_context: dict = None,
                           force_type: str = None) -> Union[SimpleTutorAgent, LLMTutorAgent]:
         """
         Create a tutor agent based on configuration.
@@ -54,6 +55,7 @@ class AgentFactory:
             student_name: Name of the student
             module_id: Curriculum module ID
             activity_state: Optional dict with activity availability info
+            student_context: Optional dict with student history, proficiency, and pedagogical info
             force_type: Force 'simple' or 'llm' agent type, overriding config
             
         Returns:
@@ -63,7 +65,9 @@ class AgentFactory:
         
         if agent_type == "llm" and config.has_llm_configured():
             try:
-                return LLMTutorAgent(student_name, module_id, activity_state=activity_state)
+                return LLMTutorAgent(student_name, module_id, 
+                                    activity_state=activity_state,
+                                    student_context=student_context)
             except Exception as e:
                 print(f"⚠ LLM agent initialization failed: {e}")
                 print("↳ Falling back to simple rule-based agent")

@@ -15,19 +15,21 @@ class AgentManager:
     - Routes messages to appropriate agent based on context
     """
     
-    def __init__(self, student_name: str, module_id: str):
+    def __init__(self, student_name: str, module_id: str, student_context: Optional[Dict] = None):
         """
         Initialize agent manager with persistent tutor.
         
         Args:
             student_name: Name of the student
             module_id: Curriculum module ID
+            student_context: Optional dict with student history and pedagogical info
         """
         self.student_name = student_name
         self.module_id = module_id
         
         # Persistent tutor agent for general session guidance
-        self.tutor = TutorAgent(student_name, module_id)
+        # Pass student context to enable personalized tutoring
+        self.tutor = TutorAgent(student_name, module_id, student_context=student_context)
         
         # Ephemeral activity agent (created/destroyed per activity)
         self.current_activity_agent: Optional[ActivityAgent] = None

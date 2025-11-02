@@ -9,6 +9,7 @@ from datetime import datetime
 from ..database.operations import DatabaseOperations
 from ..services.curriculum import CurriculumService
 from ..services.bayesian_proficiency import BayesianProficiencyService
+from ..services.progression import ProgressionService
 from ..agents.agent_factory import AgentFactory
 
 router = APIRouter()
@@ -32,6 +33,7 @@ class SessionInitResponse(BaseModel):
     curriculum_module: Dict[str, Any]
     progress: Dict[str, Any]  # Student's progress data
     is_returning_student: bool
+    student_context: Optional[Dict[str, Any]] = None  # Activity history + proficiency for LLM
 
 
 class ActivityStartRequest(BaseModel):
@@ -67,6 +69,24 @@ class ActivityEndResponse(BaseModel):
 class SessionEndRequest(BaseModel):
     """Request to end a session"""
     session_id: str
+
+
+class NextActivityRequest(BaseModel):
+    """Request to get next recommended activity"""
+    session_id: str
+    current_activity: Optional[str] = None
+
+
+class NextActivityResponse(BaseModel):
+    """Response with next activity recommendation"""
+    activity_type: str
+    reason: str
+    is_new: bool
+    progress_percentage: float
+    unlocked_new: bool
+    total_activities: int
+    completed_activities: int
+    display_info: Dict[str, Any]
 
 
 # Routes
@@ -119,15 +139,29 @@ async def initialize_session(request: SessionInitRequest):
         # Get student's progress
         progress = DatabaseOperations.get_student_progress(student.student_id)
         
+        # Build comprehensive student context for LLM (only for returning students)
+        student_context = None
+        if is_returning:
+            student_context = _build_student_context(student.student_id, request.module_id, progress)
+        
         # Build activity state for tutor agent
-        unlocked_activities = progress.get('unlocked_exercises', [])
+        unlocked_activities = []
+        for activity, data in progress.items():
+            if data.get('unlocked', False):
+                unlocked_activities.append(activity)
+        
         activity_state = {
             'available': available_activities,
             'unlocked': unlocked_activities if unlocked_activities else [available_activities[0]] if available_activities else []
         }
         
-        # Get tutor agent greeting with activity state context
-        agent = AgentFactory.create_tutor_agent(student.name, request.module_id, activity_state=activity_state)
+        # Get tutor agent greeting with activity state context and student history
+        agent = AgentFactory.create_tutor_agent(
+            student.name, 
+            request.module_id, 
+            activity_state=activity_state,
+            student_context=student_context
+        )
         tutor_greeting = agent.get_welcome_message()
         
         return SessionInitResponse(
@@ -139,7 +173,8 @@ async def initialize_session(request: SessionInitRequest):
             tutor_greeting=tutor_greeting,
             curriculum_module=curriculum,
             progress=progress,
-            is_returning_student=is_returning
+            is_returning_student=is_returning,
+            student_context=student_context
         )
         
     except HTTPException:
@@ -168,6 +203,47 @@ async def end_session(request: SessionEndRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to end session: {str(e)}")
+
+
+@router.post("/progression/next", response_model=NextActivityResponse)
+async def get_next_activity(request: NextActivityRequest):
+    """
+    Get the next recommended activity based on student's progress and proficiency.
+    Uses ProgressionService to intelligently determine optimal learning path.
+    """
+    try:
+        # Verify session exists
+        session = DatabaseOperations.get_session(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Get next activity recommendation from ProgressionService
+        recommendation = ProgressionService.get_next_activity(
+            session.student_id,
+            session.module_id,
+            request.current_activity
+        )
+        
+        # Get display info for the recommended activity
+        display_info = ProgressionService.get_activity_display_info(
+            recommendation['activity_type']
+        )
+        
+        return NextActivityResponse(
+            activity_type=recommendation['activity_type'],
+            reason=recommendation['reason'],
+            is_new=recommendation['is_new'],
+            progress_percentage=recommendation['progress_percentage'],
+            unlocked_new=recommendation['unlocked_new'],
+            total_activities=recommendation['total_activities'],
+            completed_activities=recommendation['completed_activities'],
+            display_info=display_info
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get next activity: {str(e)}")
 
 
 @router.post("/activity/start", response_model=ActivityStartResponse)
@@ -327,6 +403,171 @@ async def end_activity(request: ActivityEndRequest):
 
 
 # Helper functions
+def _build_student_context(student_id: str, module_id: str, progress: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build comprehensive student context for LLM awareness.
+    Includes activity history, proficiency summary, pedagogical guidance, and overall stats.
+    """
+    print(f"\n{'='*60}")
+    print(f"[CONTEXT] Building student context for: {student_id}")
+    print(f"[CONTEXT] Module: {module_id}")
+    print(f"[CONTEXT] Progress keys: {list(progress.keys())}")
+    print(f"{'='*60}\n")
+    
+    context = {
+        'module_info': {},
+        'learning_progress': {},
+        'progress_summary': {},
+        'recent_activity': {},
+        'proficiency_summary': {},
+        'problem_words': [],
+        'question_guidelines': {},
+        'overall_stats': {}
+    }
+    
+    # Load curriculum for module info
+    try:
+        print("[CONTEXT] Loading curriculum...")
+        curriculum = CurriculumService.load_curriculum(module_id)
+        print(f"[CONTEXT] Curriculum loaded successfully, type: {type(curriculum)}")
+        print(f"[CONTEXT] Curriculum keys: {list(curriculum.keys()) if isinstance(curriculum, dict) else 'not a dict'}")
+        
+        # 1. Module pedagogical information
+        goals = curriculum.get('goals', '')
+        subject = curriculum.get('subject', 'reading')
+        print(f"[CONTEXT] Extracted - goals: {goals[:50]}..., subject: {subject}")
+        
+        context['module_info'] = {
+            'goals': goals,
+            'subject': subject,
+            'teaching_strategies': [
+                'phonics',
+                'rhyming', 
+                'close pairs (e.g., money vs monkey)',
+                'starting letters',
+                'multiple meanings'
+            ],
+            'word_pairs': [
+                'ship-shape',
+                'money-monkey', 
+                'deck-dock',
+                'cat-rat',
+                'pirate-parrot'
+            ]
+        }
+        print(f"[CONTEXT] ✓ Module info loaded: {context['module_info']['subject']}")
+    except Exception as e:
+        print(f"[CONTEXT] ✗ Module info failed with exception: {type(e).__name__}: {str(e)}")
+        import traceback
+        print(f"[CONTEXT] Traceback:\n{traceback.format_exc()}")
+        context['module_info'] = {'available': False}
+    
+    # 2. Learning progress and question guidelines
+    # Determine current learning stage based on unlocked activities
+    unlocked_activities = [act for act, data in progress.items() if data.get('unlocked', False)]
+    spelling_unlocked = 'spelling' in unlocked_activities
+    
+    context['learning_progress'] = {
+        'unlocked_activities': unlocked_activities,
+        'spelling_introduced': spelling_unlocked,
+        'current_stage': 'early' if not spelling_unlocked else 'advanced'
+    }
+    
+    # Question format guidelines based on learning stage
+    context['question_guidelines'] = {
+        'format': 'single word answers preferred',
+        'early_stage_guidance': 'Use A/B multiple choice format - student has not practiced spelling yet',
+        'advanced_stage_guidance': 'Can ask for typed single words - student has practiced spelling',
+        'example_early': 'Does cat rhyme with: A) rat, or B) basket?',
+        'example_advanced': 'What word rhymes with cat?'
+    }
+    
+    # 3. Progress summary from the progress dict
+    for activity, data in progress.items():
+        if data.get('best_score'):
+            context['progress_summary'][activity] = {
+                'completed': True,
+                'best_percentage': data['best_score']['percentage'],
+                'attempts': data.get('attempts', 0),
+                'highest_difficulty': data.get('highest_difficulty', 'unknown')
+            }
+        elif data.get('unlocked'):
+            context['progress_summary'][activity] = {
+                'completed': False,
+                'unlocked': True,
+                'attempts': 0
+            }
+    
+    # 2. Get recent activity attempts (last 3 per activity)
+    activity_types = ['multiple_choice', 'fill_in_the_blank', 'spelling', 'bubble_pop', 'fluent_reading']
+    for activity_type in activity_types:
+        recent = DatabaseOperations.get_student_performance_history(student_id, activity_type, limit=3)
+        if recent:
+            context['recent_activity'][activity_type] = [
+                {
+                    'score': attempt.score,
+                    'total': attempt.total,
+                    'percentage': round((attempt.score / attempt.total * 100) if attempt.total > 0 else 0, 1),
+                    'difficulty': attempt.difficulty,
+                    'date': attempt.date.isoformat() if attempt.date else None
+                }
+                for attempt in recent
+            ]
+    
+    # 3. Get proficiency summary (aggregated, not raw alpha/beta)
+    try:
+        proficiencies = DatabaseOperations.get_student_proficiencies(
+            student_id, 
+            level='item',
+            module_id=module_id
+        )
+        
+        if proficiencies:
+            # Calculate average proficiency and identify weak/strong areas
+            total_ability = sum(p.mean_ability for p in proficiencies)
+            avg_ability = total_ability / len(proficiencies) if proficiencies else 0.5
+            
+            # Find items needing work (below 0.6) and mastered items (above 0.8)
+            needs_work = [p.item_id for p in proficiencies if p.mean_ability < 0.6]
+            mastered = [p.item_id for p in proficiencies if p.mean_ability > 0.8]
+            
+            context['proficiency_summary'] = {
+                'average_ability': round(avg_ability, 2),
+                'total_items': len(proficiencies),
+                'mastered_count': len(mastered),
+                'needs_work_count': len(needs_work),
+                'mastered_items': mastered[:5],  # Top 5
+                'needs_work_items': needs_work[:5]  # Bottom 5
+            }
+            
+            # Extract problem words for targeted practice
+            context['problem_words'] = needs_work[:5] if needs_work else []
+    except Exception as e:
+        # If proficiency data not available, skip it
+        context['proficiency_summary'] = {'available': False}
+        context['problem_words'] = []
+    
+    # 4. Get overall stats
+    try:
+        stats = DatabaseOperations.get_student_stats(student_id)
+        context['overall_stats'] = {
+            'total_attempts': stats.get('total_attempts', 0),
+            'average_score': stats.get('average_score', 0),
+            'activities_tried': len(stats.get('activity_breakdown', {}))
+        }
+        print(f"[CONTEXT] ✓ Overall stats loaded: {context['overall_stats']['total_attempts']} attempts")
+    except Exception as e:
+        print(f"[CONTEXT] ✗ Overall stats failed: {e}")
+        context['overall_stats'] = {'available': False}
+    
+    print(f"\n[CONTEXT] ===== CONTEXT BUILD COMPLETE =====")
+    print(f"[CONTEXT] Sections populated: {[k for k, v in context.items() if v]}")
+    print(f"[CONTEXT] Returning context with {len(context)} sections")
+    print(f"{'='*60}\n")
+    
+    return context
+
+
 def _get_activity_display_name(activity_type: str) -> str:
     """Get child-friendly display name for activity"""
     names = {
