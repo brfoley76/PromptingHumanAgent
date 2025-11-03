@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import Student, Session as SessionModel, ActivityAttempt, ChatMessage, StudentProficiency
+from .models import Student, Session as SessionModel, ActivityAttempt, ChatMessage, StudentProficiency, ActivityMastery
 
 
 class DatabaseOperations:
@@ -435,6 +435,138 @@ class DatabaseOperations:
             return difficulty.lower() == 'moderate'
         else:
             return difficulty.lower() == 'hard'
+    
+    @staticmethod
+    def _get_difficulty_rank(activity: str, difficulty: str) -> int:
+        """Helper to get numeric rank of difficulty for comparison"""
+        if activity == 'multiple_choice':
+            return int(difficulty) if difficulty.isdigit() else 3
+        else:
+            difficulty_map = {'easy': 1, 'moderate': 2, 'medium': 2, 'hard': 3}
+            return difficulty_map.get(difficulty.lower(), 1)
+    
+    @staticmethod
+    def update_activity_mastery(
+        student_id: str,
+        module_id: str,
+        activity_type: str,
+        difficulty: str,
+        score_percentage: float
+    ) -> ActivityMastery:
+        """
+        Update highest difficulty completed for an activity.
+        Tracks mastery progress and sets completed_hard_mode flag when appropriate.
+        
+        Args:
+            student_id: Student's ID
+            module_id: Module ID
+            activity_type: Type of activity
+            difficulty: Difficulty level completed
+            score_percentage: Score as percentage (0-100)
+            
+        Returns:
+            Updated or created ActivityMastery object
+        """
+        db = next(get_db())
+        try:
+            # Get existing mastery record
+            mastery = db.query(ActivityMastery).filter(
+                ActivityMastery.student_id == student_id,
+                ActivityMastery.module_id == module_id,
+                ActivityMastery.activity_type == activity_type
+            ).first()
+            
+            difficulty_rank = DatabaseOperations._get_difficulty_rank(activity_type, difficulty)
+            is_hard = DatabaseOperations._is_hard_difficulty(activity_type, difficulty)
+            
+            if not mastery:
+                # Create new mastery record
+                mastery = ActivityMastery(
+                    student_id=student_id,
+                    module_id=module_id,
+                    activity_type=activity_type,
+                    highest_difficulty=difficulty,
+                    highest_difficulty_score=score_percentage,
+                    highest_difficulty_date=datetime.utcnow(),
+                    completed_hard_mode=(is_hard and score_percentage >= 80.0)
+                )
+                db.add(mastery)
+            else:
+                # Update if this is a harder difficulty or better score on same difficulty
+                current_rank = DatabaseOperations._get_difficulty_rank(activity_type, mastery.highest_difficulty)
+                
+                if difficulty_rank > current_rank:
+                    # New harder difficulty
+                    mastery.highest_difficulty = difficulty
+                    mastery.highest_difficulty_score = score_percentage
+                    mastery.highest_difficulty_date = datetime.utcnow()
+                elif difficulty_rank == current_rank and score_percentage > mastery.highest_difficulty_score:
+                    # Better score on same difficulty
+                    mastery.highest_difficulty_score = score_percentage
+                    mastery.highest_difficulty_date = datetime.utcnow()
+                
+                # Update completion flag if achieved 80%+ on hard
+                if is_hard and score_percentage >= 80.0:
+                    mastery.completed_hard_mode = True
+                
+                mastery.updated_at = datetime.utcnow()
+            
+            db.commit()
+            db.refresh(mastery)
+            return mastery
+        finally:
+            db.close()
+    
+    @staticmethod
+    def get_activity_mastery(
+        student_id: str,
+        module_id: str,
+        activity_type: str
+    ) -> Optional[ActivityMastery]:
+        """
+        Get mastery record for a specific activity.
+        
+        Args:
+            student_id: Student's ID
+            module_id: Module ID
+            activity_type: Type of activity
+            
+        Returns:
+            ActivityMastery object or None if not found
+        """
+        db = next(get_db())
+        try:
+            return db.query(ActivityMastery).filter(
+                ActivityMastery.student_id == student_id,
+                ActivityMastery.module_id == module_id,
+                ActivityMastery.activity_type == activity_type
+            ).first()
+        finally:
+            db.close()
+    
+    @staticmethod
+    def get_all_activity_mastery(
+        student_id: str,
+        module_id: str
+    ) -> List[ActivityMastery]:
+        """
+        Get all mastery records for a student in a module.
+        
+        Args:
+            student_id: Student's ID
+            module_id: Module ID
+            
+        Returns:
+            List of ActivityMastery objects
+        """
+        db = next(get_db())
+        try:
+            return db.query(ActivityMastery).filter(
+                ActivityMastery.student_id == student_id,
+                ActivityMastery.module_id == module_id
+            ).all()
+        finally:
+            db.close()
     
     @staticmethod
     def get_or_create_proficiency(

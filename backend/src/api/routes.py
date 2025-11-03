@@ -355,6 +355,15 @@ async def end_activity(request: ActivityEndRequest):
         # Calculate percentage
         percentage = (request.results['score'] / request.results['total'] * 100) if request.results['total'] > 0 else 0
         
+        # Update activity mastery tracking
+        DatabaseOperations.update_activity_mastery(
+            student_id=session.student_id,
+            module_id=session.module_id,
+            activity_type=request.activity_type,
+            difficulty=request.tuning_settings.get('difficulty', 'medium'),
+            score_percentage=percentage
+        )
+        
         # Get agent feedback
         agent = AgentFactory.create_activity_agent(session.student_id, session.module_id)
         feedback = agent.get_activity_feedback(
@@ -364,26 +373,16 @@ async def end_activity(request: ActivityEndRequest):
             percentage
         )
         
-        # Check for unlocks using Bayesian mastery threshold
-        unlocked = []
-        module_mastered = BayesianProficiencyService.check_mastery_threshold(
-            session.student_id,
-            session.module_id,
-            threshold=0.85
-        )
+        # NOTE: Unlocking is now handled automatically by ProgressionService
+        # which checks activity_mastery table for hard mode completion.
+        # No need to manually unlock here - it happens when querying progression.
         
-        if module_mastered or (percentage >= 80 and _is_hard_difficulty(request.activity_type, request.tuning_settings.get('difficulty'))):
-            next_activity = _get_next_activity(request.activity_type)
-            if next_activity:
-                DatabaseOperations.unlock_exercise(session.student_id, next_activity, session.module_id)
-                unlocked.append(next_activity)
-        
-        # Get next recommendation
+        # Get next recommendation (this will check mastery and determine unlocks)
         next_recommendation = _get_next_recommendation(
             session.student_id,
             request.activity_type,
             percentage,
-            unlocked
+            []  # Empty list - unlocks determined by ProgressionService
         )
         
         return ActivityEndResponse(
@@ -393,7 +392,7 @@ async def end_activity(request: ActivityEndRequest):
                 "attempts": attempt.attempt_id
             },
             next_recommendation=next_recommendation,
-            unlocked_activities=unlocked
+            unlocked_activities=[]  # Unlocks determined by ProgressionService, not here
         )
         
     except HTTPException:

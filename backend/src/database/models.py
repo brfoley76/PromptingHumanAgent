@@ -4,7 +4,7 @@ Stores student performance data only - NOT curriculum content.
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey, Text, Float, Index
+from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey, Text, Float, Index, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -80,6 +80,36 @@ class ChatMessage(Base):
     
     # Relationships
     session = relationship("Session", back_populates="messages")
+
+
+class ActivityMastery(Base):
+    """
+    Tracks highest difficulty completed per activity per student.
+    Used to enforce hard-mode completion before unlocking next activity.
+    """
+    __tablename__ = "activity_mastery"
+    
+    mastery_id = Column(String, primary_key=True, default=generate_uuid)
+    student_id = Column(String, ForeignKey("students.student_id"), nullable=False, index=True)
+    module_id = Column(String, nullable=False, index=True)
+    activity_type = Column(String, nullable=False, index=True)
+    
+    # Difficulty tracking
+    highest_difficulty = Column(String, nullable=False)  # 'easy', 'medium', 'hard' or '3', '4', '5'
+    highest_difficulty_score = Column(Float, nullable=False)  # Best score on that difficulty (percentage)
+    highest_difficulty_date = Column(DateTime, nullable=False)
+    
+    # Completion flag - True if scored 80%+ on hard mode
+    completed_hard_mode = Column(Boolean, default=False)
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Composite index for efficient queries
+    __table_args__ = (
+        Index('idx_student_module_activity', 'student_id', 'module_id', 'activity_type', unique=True),
+    )
 
 
 class StudentProficiency(Base):

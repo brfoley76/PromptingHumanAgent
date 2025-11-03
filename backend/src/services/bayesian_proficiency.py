@@ -27,8 +27,8 @@ class BayesianProficiencyService:
     """
     
     # Default parameters (can be tuned based on empirical data)
-    DEFAULT_PRIOR_ALPHA = 1.0  # Uninformative prior - faster learning
-    DEFAULT_PRIOR_BETA = 1.0   # Uninformative prior - faster learning
+    DEFAULT_PRIOR_ALPHA = 0.5  # Jeffreys prior - even faster learning, more responsive
+    DEFAULT_PRIOR_BETA = 0.5   # Jeffreys prior - even faster learning, more responsive
     DEFAULT_LEARNING_RATE = 0.1
     DEFAULT_FORGETTING_RATE = 0.05  # Per day
     MASTERY_THRESHOLD = 0.85
@@ -428,19 +428,19 @@ class BayesianProficiencyService:
         """
         Convert ability score to difficulty level.
         Tuned for optimal challenge zone (80-90% accuracy).
-        Conservative thresholds to ensure mastery before advancing.
+        Lowered medium threshold to 0.60 to allow 65% performers to progress.
         """
         if activity_type == 'multiple_choice':
             if ability >= 0.80:  # Hard: requires strong proficiency
                 return '5'
-            elif ability >= 0.65:  # Medium: solid understanding
+            elif ability >= 0.60:  # Medium: solid understanding (lowered from 0.65)
                 return '4'
             else:
                 return '3'  # Easy: building foundation
         else:
             if ability >= 0.80:  # Hard: requires strong proficiency
                 return 'hard'
-            elif ability >= 0.65:  # Medium: solid understanding
+            elif ability >= 0.60:  # Medium: solid understanding (lowered from 0.65)
                 return 'medium'
             else:
                 return 'easy'  # Easy: building foundation

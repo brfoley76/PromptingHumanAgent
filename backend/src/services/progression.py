@@ -33,21 +33,13 @@ class ProgressionService:
     ]
     
     # Proficiency thresholds for unlocking next activity
+    # Based purely on Bayesian mastery metrics - no attempt count requirements
     UNLOCK_THRESHOLDS = {
         'multiple_choice': 0.70,      # 70% module proficiency to unlock fill_in_the_blank
         'fill_in_the_blank': 0.75,    # 75% to unlock spelling
         'spelling': 0.80,              # 80% to unlock bubble_pop
         'bubble_pop': 0.85,            # 85% to unlock fluent_reading
         'fluent_reading': 0.90         # 90% for module completion
-    }
-    
-    # Minimum attempts before allowing progression
-    MIN_ATTEMPTS = {
-        'multiple_choice': 2,          # At least 2 attempts
-        'fill_in_the_blank': 2,
-        'spelling': 2,
-        'bubble_pop': 1,               # Game-based, 1 attempt sufficient
-        'fluent_reading': 1            # Reading practice, 1 attempt sufficient
     }
     
     @staticmethod
@@ -128,6 +120,7 @@ class ProgressionService:
     ) -> Tuple[bool, str]:
         """
         Determine if student should continue with current activity or move on.
+        Based on Bayesian proficiency thresholds, not attempt counts.
         
         Args:
             student_id: Student's ID
@@ -145,11 +138,6 @@ class ProgressionService:
         if not attempts:
             return True, "First attempt - keep practicing!"
         
-        # Check minimum attempts
-        min_attempts = ProgressionService.MIN_ATTEMPTS.get(activity_type, 2)
-        if len(attempts) < min_attempts:
-            return True, f"Complete at least {min_attempts} attempts to build proficiency"
-        
         # Get recent performance
         recent_scores = [
             (a.score / a.total * 100) if a.total > 0 else 0
@@ -157,27 +145,25 @@ class ProgressionService:
         ]
         avg_recent = sum(recent_scores) / len(recent_scores) if recent_scores else 0
         
-        # Check if mastering (consistently high scores)
-        if avg_recent >= 85:
-            # Check module proficiency for this activity's unlock threshold
-            activity_index = ProgressionService.ACTIVITY_SEQUENCE.index(activity_type)
-            if activity_index < len(ProgressionService.ACTIVITY_SEQUENCE) - 1:
-                next_activity = ProgressionService.ACTIVITY_SEQUENCE[activity_index + 1]
-                threshold = ProgressionService.UNLOCK_THRESHOLDS.get(activity_type, 0.75)
-                
-                module_prof = BayesianProficiencyService.check_mastery_threshold(
-                    student_id, module_id, threshold
-                )
-                
-                if module_prof:
-                    return False, f"Great work! Ready for {next_activity.replace('_', ' ').title()}"
+        # Check if ready to progress based on Bayesian proficiency
+        activity_index = ProgressionService.ACTIVITY_SEQUENCE.index(activity_type)
+        if activity_index < len(ProgressionService.ACTIVITY_SEQUENCE) - 1:
+            next_activity = ProgressionService.ACTIVITY_SEQUENCE[activity_index + 1]
+            threshold = ProgressionService.UNLOCK_THRESHOLDS.get(activity_type, 0.75)
+            
+            meets_threshold = BayesianProficiencyService.check_mastery_threshold(
+                student_id, module_id, threshold
+            )
+            
+            if meets_threshold:
+                return False, f"Great work! Ready for {next_activity.replace('_', ' ').title()}"
         
         # Check if struggling (consistently low scores)
         if avg_recent < 60:
             return True, "Keep practicing - you're building important skills!"
         
-        # Middle ground - encourage one more attempt
-        return True, "You're making progress - try once more to solidify your learning!"
+        # Making progress but not yet at threshold
+        return True, "You're making progress - keep going to build mastery!"
     
     @staticmethod
     def _get_unlocked_activities(
@@ -188,31 +174,26 @@ class ProgressionService:
     ) -> List[str]:
         """
         Determine which activities are currently unlocked for the student.
+        NEW: Requires completing hard mode with 80%+ score to unlock next activity.
+        Once unlocked, activities stay unlocked (mastery doesn't regress).
         """
         unlocked = ['multiple_choice']  # First activity always unlocked
         
         for i, activity in enumerate(ProgressionService.ACTIVITY_SEQUENCE[:-1]):
-            # Check if current activity meets unlock threshold
-            threshold = ProgressionService.UNLOCK_THRESHOLDS.get(activity, 0.75)
-            min_attempts = ProgressionService.MIN_ATTEMPTS.get(activity, 2)
-            
-            activity_progress = progress.get(activity, {})
-            attempts = activity_progress.get('attempts', 0)
-            
-            # Check both proficiency and minimum attempts
-            has_min_attempts = attempts >= min_attempts
-            meets_threshold = BayesianProficiencyService.check_mastery_threshold(
-                student_id, module_id, threshold
+            # Check if student has completed hard mode with 80%+ score
+            mastery = DatabaseOperations.get_activity_mastery(
+                student_id, module_id, activity
             )
             
-            if has_min_attempts and meets_threshold:
+            if mastery and mastery.completed_hard_mode:
+                # Student mastered this activity on hard mode - unlock next!
                 next_activity = ProgressionService.ACTIVITY_SEQUENCE[i + 1]
                 if next_activity not in unlocked:
                     unlocked.append(next_activity)
-                    # Unlock in database
+                    # Persist unlock in database - once unlocked, stays unlocked
                     DatabaseOperations.unlock_exercise(student_id, next_activity, module_id)
             else:
-                # Stop unlocking - need to master current level first
+                # Stop unlocking - need to complete hard mode first
                 break
         
         return unlocked
